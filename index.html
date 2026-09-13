@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>단어장 앱</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="app-container">
+
+    <!-- 1. 메인 폴더 화면 -->
+    <div id="main-screen" class="screen active">
+        <div class="header">
+            <h1>내 폴더</h1>
+            <button id="btn-add-folder" class="btn">+ 새 폴더</button>
+        </div>
+        <div id="folder-grid" class="folder-grid"></div>
+    </div>
+
+    <!-- 2. 노트 캐러셀 화면 -->
+    <div id="note-screen" class="screen">
+        <div class="header">
+            <button id="btn-back-main" class="btn">‹ 메인</button>
+            <h1 id="current-folder-title">폴더 이름</h1>
+            <div>
+                <button id="btn-copy-note" class="btn" style="margin-right: 8px;">본문 복사</button>
+                <button id="btn-open-vocab" class="btn">단어장</button>
+            </div>
+        </div>
+        
+        <div class="slider-container">
+            <button id="btn-prev-slide" class="nav-arrow left">‹</button>
+            <div id="slider-wrapper" class="slider-wrapper"></div>
+            <button id="btn-next-slide" class="nav-arrow right">›</button>
+        </div>
+
+        <div class="slider-controls">
+            <button id="btn-edit-text" class="btn btn-primary">본문 수정</button>
+        </div>
+    </div>
+
+    <!-- 3. 퀴즈 화면 -->
+    <div id="quiz-screen" class="screen">
+        <div class="header">
+            <button id="btn-exit-quiz" class="btn">나가기</button>
+            <h1>퀴즈 진행 중</h1>
+            <div style="font-size: 0.95rem; color: #666;">
+                남은 단어: <span id="quiz-remaining">0</span> | 오답: <span id="quiz-wrong-count">0</span>
+            </div>
+        </div>
+        <div class="quiz-container">
+            <div id="quiz-target-word" class="target-word">Apple</div>
+            <input type="text" id="quiz-input-answer" placeholder="뜻을 입력하세요 (엔터)" autocomplete="off">
+            <div class="skip-btn-container">
+                <span id="btn-skip-quiz" class="skip-text-btn">모르겠어요 (스킵하기)</span>
+            </div>
+        </div>
+
+        <div id="feedback-overlay" class="feedback-overlay">
+            <div id="feedback-text" class="feedback-text">정답</div>
+            <button id="btn-override" class="btn btn-primary" style="display:none;">채점이 잘못되었어요 (정답 처리)</button>
+        </div>
+    </div>
+
+    <!-- 4. 결과 화면 -->
+    <div id="result-screen" class="screen">
+        <div class="quiz-container">
+            <h1 style="margin-bottom: 20px;">퀴즈 완료!</h1>
+            <p style="margin-bottom: 10px;">맞힌 단어: <span id="result-correct">0</span>개 (단어장에서 삭제됨)</p>
+            <p style="margin-bottom: 30px;">틀린 단어: <span id="result-wrong">0</span>개 (단어장에 유지됨)</p>
+            <button id="btn-close-result" class="btn btn-primary">단어장으로 돌아가기</button>
+        </div>
+    </div>
+
+    <!-- 단어장 모달 -->
+    <div id="vocab-modal" class="modal">
+        <div class="modal-content">
+            <div class="vocab-header">
+                <h2>수집된 단어장</h2>
+                <button id="btn-close-vocab" class="btn">닫기</button>
+            </div>
+
+            <div class="vocab-scroll-area">
+                <div class="vocab-section">
+                    <h3>단어</h3>
+                    <div id="word-list"></div>
+                </div>
+                <div class="vocab-section">
+                    <h3>숙어</h3>
+                    <div id="idiom-list"></div>
+                </div>
+            </div>
+
+            <div class="vocab-footer">
+                <button id="btn-copy-prompt" class="btn" style="flex:1; border: 1px solid #ccc;">AI 프롬프트 복사</button>
+                <button id="btn-import-ai" class="btn" style="flex:1; border: 1px solid #007aff; color: #007aff;">AI 결과 일괄 등록</button>
+                <button id="btn-start-quiz" class="btn btn-primary" style="flex:1; display:none;">퀴즈 시작</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 폴더 옵션 모달 -->
+    <div id="folder-option-modal" class="center-modal">
+        <div class="center-modal-box" style="text-align: center;">
+            <h3 style="margin-bottom: 16px;">폴더 설정</h3>
+            <button id="btn-folder-rename" class="btn" style="display:block; width:100%; margin: 8px 0;">이름 변경</button>
+            <button id="btn-folder-delete" class="btn" style="display:block; width:100%; margin: 8px 0; color: red;">폴더 삭제</button>
+            <button id="btn-folder-cancel" class="btn" style="display:block; width:100%; margin-top: 16px;">취소</button>
+        </div>
+    </div>
+
+    <!-- 단어 옵션 모달 -->
+    <div id="word-option-modal" class="center-modal">
+        <div class="center-modal-box" style="text-align: center;">
+            <h3 style="margin-bottom: 16px;">단어 설정</h3>
+            <button id="btn-opt-edit" class="btn" style="display:block; width:100%; margin: 8px 0;">단어 수정</button>
+            <button id="btn-opt-toggle" class="btn" style="display:block; width:100%; margin: 8px 0;">단어/숙어 전환</button>
+            <button id="btn-opt-delete" class="btn" style="display:block; width:100%; margin: 8px 0; color: red;">삭제</button>
+            <button id="btn-opt-cancel" class="btn" style="display:block; width:100%; margin-top: 16px;">취소</button>
+        </div>
+    </div>
+
+    <!-- 범용 입력 모달 -->
+    <div id="input-modal" class="center-modal">
+        <div class="center-modal-box">
+            <h3 id="input-modal-title">입력</h3>
+            <textarea id="input-modal-value" rows="6" style="width:100%; padding:12px; margin:16px 0; font-size:1rem; border:1px solid #ccc; border-radius:8px;"></textarea>
+            <div style="display: flex; justify-content: flex-end; gap: 8px;">
+                <button id="btn-input-cancel" class="btn">취소</button>
+                <button id="btn-input-submit" class="btn btn-primary">확인</button>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
