@@ -3,7 +3,6 @@ const state = {
     folders: [],
     currentFolderId: null,
     currentNoteIndex: 0,
-    vocabList: [],
     
     quizQueue: [],
     quizCurrentIndex: 0,
@@ -16,10 +15,10 @@ const state = {
     selectedFolderId: null
 };
 
+// 1. 데이터 저장/로드
 function saveData() {
     const dataToSave = {
-        folders: state.folders,
-        vocabList: state.vocabList
+        folders: state.folders
     };
     localStorage.setItem('vocaApp_data', JSON.stringify(dataToSave));
 }
@@ -30,7 +29,20 @@ function loadData() {
         try {
             const parsed = JSON.parse(saved);
             state.folders = parsed.folders || [];
-            state.vocabList = parsed.vocabList || [];
+            
+            state.folders.forEach(folder => {
+                if (!folder.createdAt) folder.createdAt = folder.id || Date.now();
+                if (!folder.notes) folder.notes = [];
+                folder.notes = folder.notes.map(note => {
+                    if (typeof note === 'string') {
+                        return { text: note, vocabList: [] };
+                    }
+                    return {
+                        text: note.text || "",
+                        vocabList: note.vocabList || []
+                    };
+                });
+            });
         } catch (e) {
             console.error("데이터 로드 실패", e);
         }
@@ -49,7 +61,6 @@ function initEventListeners() {
     document.getElementById('btn-edit-text').addEventListener('click', openEditTextModal);
     document.getElementById('btn-open-vocab').addEventListener('click', openVocabModal);
 
-    // [추가] 본문 복사 버튼 이벤트 연결
     document.getElementById('btn-copy-note').addEventListener('click', copyCurrentNoteText);
 
     document.getElementById('btn-prev-slide').addEventListener('click', () => moveSlide(-1));
@@ -63,19 +74,16 @@ function initEventListeners() {
     document.getElementById('btn-input-cancel').addEventListener('click', closeInputModal);
     document.getElementById('btn-input-submit').addEventListener('click', submitInputModal);
 
-    // 단어 옵션 이벤트
     document.getElementById('btn-opt-edit').addEventListener('click', triggerEditWord);
     document.getElementById('btn-opt-toggle').addEventListener('click', triggerToggleIdiom);
     document.getElementById('btn-opt-delete').addEventListener('click', triggerDeleteWord);
     document.getElementById('btn-opt-cancel').addEventListener('click', closeWordOptionModal);
 
-    // 폴더 옵션 이벤트
     document.getElementById('btn-folder-rename').addEventListener('click', triggerRenameFolder);
     document.getElementById('btn-folder-delete').addEventListener('click', triggerDeleteFolder);
     document.getElementById('btn-folder-cancel').addEventListener('click', closeFolderOptionModal);
 
-    // 퀴즈 이벤트
-    document.getElementById('btn-exit-quiz').addEventListener('click', exitQuiz);
+    document.getElementById('btn-exit-quiz').addEventListener('click', abandonQuiz);
     document.getElementById('quiz-input-answer').addEventListener('keypress', (e) => {
         if (e.key === 'Enter') submitQuizAnswer();
     });
@@ -102,12 +110,30 @@ function showScreen(screenId) {
     if (screenId === 'main-screen') renderFolders();
 }
 
-// 1. 폴더 기능
+function getCurrentFolder() {
+    return state.folders.find(f => f.id === state.currentFolderId);
+}
+
+function getCurrentNote() {
+    const folder = getCurrentFolder();
+    if (!folder || !folder.notes || folder.notes.length === 0) return null;
+    return folder.notes[state.currentNoteIndex];
+}
+
+function getCurrentVocabList() {
+    const note = getCurrentNote();
+    return note ? note.vocabList : [];
+}
+
+// 폴더 기능 (오래된 순서대로 정렬: 새 파일일수록 앞, 오래될수록 뒤)
 function renderFolders() {
     const grid = document.getElementById('folder-grid');
     grid.innerHTML = '';
     
-    state.folders.forEach(folder => {
+    // createdAt 기준 오름차순 정렬 (오래된 것일수록 뒤로 정렬)
+    const sortedFolders = [...state.folders].sort((a, b) => (b.createdAt || b.id) - (a.createdAt || a.id));
+
+    sortedFolders.forEach(folder => {
         const card = document.createElement('div');
         card.className = 'folder-card';
         card.innerHTML = `<div class="folder-title-badge">${escapeHtml(folder.title)}</div>`;
@@ -174,10 +200,12 @@ function triggerDeleteFolder() {
 function openNewFolderModal() {
     showInputModal("새 폴더 생성", "", (val) => {
         if (!val.trim()) return;
+        const now = Date.now();
         state.folders.push({
-            id: Date.now(),
+            id: now,
+            createdAt: now,
             title: val.trim(),
-            notes: [""]
+            notes: [{ text: "", vocabList: [] }]
         });
         saveData();
         renderFolders();
@@ -194,11 +222,7 @@ function openFolder(folderId) {
     showScreen('note-screen');
 }
 
-function getCurrentFolder() {
-    return state.folders.find(f => f.id === state.currentFolderId);
-}
-
-// 2. 노트 캐러셀 슬라이더
+// 노트 캐러셀 슬라이더
 function renderSlider() {
     const folder = getCurrentFolder();
     const wrapper = document.getElementById('slider-wrapper');
@@ -207,21 +231,28 @@ function renderSlider() {
     if (!folder) return;
 
     if (folder.notes.length === 0) {
-        folder.notes.push("");
+        folder.notes.push({ text: "", vocabList: [] });
     }
 
-    folder.notes.forEach((text) => {
+    folder.notes.forEach((noteObj, idx) => {
         const page = document.createElement('div');
         page.className = 'note-page';
         
-        if (!text.trim()) {
+        page.onclick = (e) => {
+            if (idx !== state.currentNoteIndex) {
+                state.currentNoteIndex = idx;
+                updateSliderPosition();
+            }
+        };
+
+        if (!noteObj.text.trim()) {
             page.innerHTML = `
                 <div style="height:100%; display:flex; align-items:center; justify-content:center;">
                     <button class="btn btn-primary" onclick="openEditTextModal()">+ 본문 추가</button>
                 </div>
             `;
         } else {
-            page.innerHTML = parseNoteText(text);
+            page.innerHTML = parseNoteText(noteObj.text, idx);
         }
         wrapper.appendChild(page);
     });
@@ -236,7 +267,7 @@ function createAddPageCard() {
     card.className = 'add-page-btn';
     card.onclick = () => {
         const folder = getCurrentFolder();
-        folder.notes.push("");
+        folder.notes.push({ text: "", vocabList: [] });
         state.currentNoteIndex = folder.notes.length - 1;
         saveData();
         renderSlider();
@@ -284,52 +315,94 @@ function openEditTextModal() {
     if (!folder) return;
     
     if (state.currentNoteIndex >= folder.notes.length) {
-        folder.notes.push("");
+        folder.notes.push({ text: "", vocabList: [] });
     }
 
-    const currentText = folder.notes[state.currentNoteIndex] || "";
+    const currentNote = folder.notes[state.currentNoteIndex];
 
-    showInputModal("본문 수정", currentText, (text) => {
-        folder.notes[state.currentNoteIndex] = text;
+    showInputModal("본문 수정", currentNote.text || "", (text) => {
+        currentNote.text = text;
         saveData();
         renderSlider();
     });
 }
 
-// 노트 본문 렌더링 (통글을 문장별로 분리해서 표시)
-function parseNoteText(text) {
+// 스마트 문장 분리
+function splitSentences(text) {
+    if (!text) return [];
+
+    const rawTokens = text.split(/(\s+)/);
+    const abbrRegex = /^(?:Mr|Mrs|Ms|Dr|Prof|St|vs|etc|e\.g|i\.e|Vol|No|[A-Z])\.$/i;
+
+    let sentences = [];
+    let currentSentence = "";
+
+    for (let i = 0; i < rawTokens.length; i++) {
+        let token = rawTokens[i];
+        currentSentence += token;
+
+        const trimmed = token.trim();
+        if (/[.!?]$/.test(trimmed) && !abbrRegex.test(trimmed)) {
+            if (currentSentence.trim()) {
+                sentences.push(currentSentence.trim().replace(/\s+/g, ' '));
+            }
+            currentSentence = "";
+        }
+    }
+
+    if (currentSentence.trim()) {
+        sentences.push(currentSentence.trim().replace(/\s+/g, ' '));
+    }
+
+    return sentences;
+}
+
+// 노트 본문 렌더링
+function parseNoteText(text, noteIdx) {
     if (!text) return '';
 
-    // . ! ? 기호 기준으로 문장 나누기
-    const sentences = text.split(/(?<=[.!?])\s+/);
+    const sentences = splitSentences(text);
+    const folder = getCurrentFolder();
+    const noteObj = folder ? folder.notes[noteIdx] : null;
+    const vocabList = noteObj ? noteObj.vocabList : [];
 
     return sentences.map(sentence => {
         const tokens = sentence.split(/([a-zA-Z0-9]+)/);
         const parsed = tokens.map(token => {
             if (/^[a-zA-Z0-9]+$/.test(token)) {
                 const lowerToken = token.toLowerCase();
-                const isCollected = state.vocabList.some(v => v.word.toLowerCase() === lowerToken);
+                const isCollected = vocabList.some(v => v.word.toLowerCase() === lowerToken);
                 const highlightClass = isCollected ? 'highlight' : '';
-                return `<span class="clickable-word ${highlightClass}" data-word="${escapeHtml(lowerToken)}" onclick="toggleWordClick(this, '${escapeHtml(token)}')">${escapeHtml(token)}</span>`;
+                return `<span class="clickable-word ${highlightClass}" data-word="${escapeHtml(lowerToken)}" onclick="handleWordClick(event, this, '${escapeHtml(token)}', ${noteIdx})">${escapeHtml(token)}</span>`;
             }
             return escapeHtml(token);
         }).join('');
 
-        // 문장과 문장 사이의 화면 여백 (margin-bottom: 20px)
-        return `<p style="margin-bottom: 20px; line-height: 1.6;">${parsed}</p>`;
+        return `<p style="margin-bottom: 16px; line-height: 1.7;">${parsed}</p>`;
     }).join('');
 }
 
+function handleWordClick(event, el, wordStr, noteIdx) {
+    if (noteIdx !== state.currentNoteIndex) {
+        event.stopPropagation();
+        state.currentNoteIndex = noteIdx;
+        updateSliderPosition();
+        return;
+    }
+    toggleWordClick(el, wordStr);
+}
+
 function toggleWordClick(el, wordStr) {
+    const vocabList = getCurrentVocabList();
     const lowerWord = wordStr.toLowerCase();
-    const idx = state.vocabList.findIndex(v => v.word.toLowerCase() === lowerWord);
-    const sameWords = document.querySelectorAll(`.clickable-word[data-word="${lowerWord}"]`);
+    const idx = vocabList.findIndex(v => v.word.toLowerCase() === lowerWord);
+    const sameWords = document.querySelectorAll(`.note-page.active-page .clickable-word[data-word="${lowerWord}"]`);
 
     if (idx > -1) {
-        state.vocabList.splice(idx, 1);
+        vocabList.splice(idx, 1);
         sameWords.forEach(w => w.classList.remove('highlight'));
     } else {
-        state.vocabList.push({
+        vocabList.push({
             id: Date.now() + Math.random(),
             word: wordStr,
             type: 'word',
@@ -340,7 +413,7 @@ function toggleWordClick(el, wordStr) {
     saveData();
 }
 
-// 3. 단어장 및 AI 프롬프트 복사 / 일괄 등록
+// 단어장 관리
 function openVocabModal() {
     renderVocabList();
     document.getElementById('vocab-modal').classList.add('active');
@@ -351,12 +424,13 @@ function closeVocabModal() {
 }
 
 function renderVocabList() {
+    const vocabList = getCurrentVocabList();
     const wordListEl = document.getElementById('word-list');
     const idiomListEl = document.getElementById('idiom-list');
     wordListEl.innerHTML = '';
     idiomListEl.innerHTML = '';
 
-    state.vocabList.forEach(item => {
+    vocabList.forEach(item => {
         const row = document.createElement('div');
         row.className = 'vocab-item';
         row.innerHTML = `
@@ -372,15 +446,17 @@ function renderVocabList() {
 }
 
 function updateWordMean(id, value) {
-    const item = state.vocabList.find(v => v.id == id);
+    const vocabList = getCurrentVocabList();
+    const item = vocabList.find(v => v.id == id);
     if (item) item.mean = value;
     saveData();
     checkQuizAvailability();
 }
 
 function checkQuizAvailability() {
+    const vocabList = getCurrentVocabList();
     const btnQuiz = document.getElementById('btn-start-quiz');
-    const canStart = state.vocabList.length > 0 && state.vocabList.every(v => v.mean.trim() !== '');
+    const canStart = vocabList.length > 0 && vocabList.every(v => v.mean.trim() !== '');
     btnQuiz.style.display = canStart ? 'block' : 'none';
 }
 
@@ -395,7 +471,8 @@ function closeWordOptionModal() {
 }
 
 function triggerEditWord() {
-    const item = state.vocabList.find(v => v.id == state.selectedWordId);
+    const vocabList = getCurrentVocabList();
+    const item = vocabList.find(v => v.id == state.selectedWordId);
     closeWordOptionModal();
     if (item) {
         showInputModal("단어 수정", item.word, (newWord) => {
@@ -410,7 +487,8 @@ function triggerEditWord() {
 }
 
 function triggerToggleIdiom() {
-    const item = state.vocabList.find(v => v.id == state.selectedWordId);
+    const vocabList = getCurrentVocabList();
+    const item = vocabList.find(v => v.id == state.selectedWordId);
     if (item) {
         item.type = item.type === 'word' ? 'idiom' : 'word';
         saveData();
@@ -420,18 +498,21 @@ function triggerToggleIdiom() {
 }
 
 function triggerDeleteWord() {
-    state.vocabList = state.vocabList.filter(v => v.id != state.selectedWordId);
-    saveData();
-    closeWordOptionModal();
-    renderVocabList();
-    renderSlider();
+    const note = getCurrentNote();
+    if (note) {
+        note.vocabList = note.vocabList.filter(v => v.id != state.selectedWordId);
+        saveData();
+        closeWordOptionModal();
+        renderVocabList();
+        renderSlider();
+    }
 }
 
-// AI 프롬프트 생성 시 출력 형식 지정
 function copyAIPrompt() {
-    const folder = getCurrentFolder();
-    const bodyText = folder ? folder.notes.join('\n\n') : '';
-    const wordsText = state.vocabList.map(v => `- ${v.word}`).join('\n');
+    const note = getCurrentNote();
+    const bodyText = note ? note.text : '';
+    const vocabList = getCurrentVocabList();
+    const wordsText = vocabList.map(v => `- ${v.word}`).join('\n');
 
     const promptText = `[본문]\n${bodyText}\n\n[단어 목록]\n${wordsText}\n\n위 본문을 참고해서 단어 목록의 뜻을 적어줘. 만약 단어가 아닌 숙어라면 숙어로 분류해 줘.\n답변은 부연설명 없이 반드시 아래 양식처럼만 작성해 줘:\n\n단어 : 뜻\n단어 : 뜻`;
 
@@ -442,7 +523,6 @@ function copyAIPrompt() {
     });
 }
 
-// AI 응답 결과 한 번에 등록하기
 function openImportAIModal() {
     showInputModal(
         "AI 응답 결과 일괄 등록",
@@ -450,6 +530,7 @@ function openImportAIModal() {
         (pastedText) => {
             if (!pastedText.trim()) return;
             
+            const vocabList = getCurrentVocabList();
             const lines = pastedText.split('\n');
             let updatedCount = 0;
 
@@ -459,7 +540,7 @@ function openImportAIModal() {
                     const word = parts[0].replace(/^[-*\s]+/, '').trim().toLowerCase();
                     const mean = parts.slice(1).join(':').trim();
 
-                    const targetWord = state.vocabList.find(v => v.word.toLowerCase() === word);
+                    const targetWord = vocabList.find(v => v.word.toLowerCase() === word);
                     if (targetWord && mean) {
                         targetWord.mean = mean;
                         updatedCount++;
@@ -474,10 +555,11 @@ function openImportAIModal() {
     );
 }
 
-// 4. 퀴즈 시스템
+// 퀴즈 시스템
 function startQuiz() {
     closeVocabModal();
-    state.quizQueue = [...state.vocabList].sort(() => Math.random() - 0.5);
+    const vocabList = getCurrentVocabList();
+    state.quizQueue = [...vocabList].sort(() => Math.random() - 0.5);
     state.quizCurrentIndex = 0;
     state.quizCorrectCount = 0;
     state.quizWrongCount = 0;
@@ -519,14 +601,20 @@ function submitQuizAnswer() {
     if (isCorrect) {
         state.quizCorrectCount++;
         currentItem._isCorrect = true;
-        feedbackText.innerText = "정답";
-        feedbackText.className = "feedback-text correct";
+        feedbackText.innerHTML = `
+            <div style="text-align: center; width: 100%;">
+                <div style="font-size: 1.8rem; color: #555; margin-bottom: 12px; font-weight: 500;">[뜻] ${escapeHtml(currentItem.mean)}</div>
+                <div style="font-size: 4rem; font-weight: 800; color: #2ecc71;">정답!</div>
+            </div>`;
         overrideBtn.style.display = "none";
     } else {
         state.quizWrongCount++;
         currentItem._isCorrect = false;
-        feedbackText.innerText = "오답";
-        feedbackText.className = "feedback-text wrong";
+        feedbackText.innerHTML = `
+            <div style="text-align: center; width: 100%;">
+                <div style="font-size: 1.8rem; color: #555; margin-bottom: 12px; font-weight: 500;">[뜻] ${escapeHtml(currentItem.mean)}</div>
+                <div style="font-size: 4rem; font-weight: 800; color: #e74c3c;">오답</div>
+            </div>`;
         overrideBtn.style.display = "block";
     }
 
@@ -534,7 +622,7 @@ function submitQuizAnswer() {
 
     state.quizTimer = setTimeout(() => {
         skipFeedbackToNext();
-    }, 1500);
+    }, 1800);
 }
 
 function skipQuizQuestion() {
@@ -547,15 +635,18 @@ function skipQuizQuestion() {
 
     state.quizWrongCount++;
     currentItem._isCorrect = false;
-    feedbackText.innerText = "오답 (스킵)";
-    feedbackText.className = "feedback-text wrong";
+    feedbackText.innerHTML = `
+        <div style="text-align: center; width: 100%;">
+            <div style="font-size: 1.8rem; color: #555; margin-bottom: 12px; font-weight: 500;">[뜻] ${escapeHtml(currentItem.mean)}</div>
+            <div style="font-size: 4rem; font-weight: 800; color: #e74c3c;">오답</div>
+        </div>`;
     overrideBtn.style.display = "block";
 
     overlay.classList.add('active');
 
     state.quizTimer = setTimeout(() => {
         skipFeedbackToNext();
-    }, 1500);
+    }, 1800);
 }
 
 function skipFeedbackToNext() {
@@ -584,10 +675,18 @@ function overrideCorrect() {
     loadNextQuiz();
 }
 
-function exitQuiz() {
-    if (state.quizTimer) clearTimeout(state.quizTimer);
-    showScreen('note-screen');
-    openVocabModal();
+function abandonQuiz() {
+    if (confirm("퀴즈를 포기하시겠습니까? 지금까지 맞춘 단어만 단어장에서 삭제됩니다.")) {
+        if (state.quizTimer) clearTimeout(state.quizTimer);
+        
+        for (let i = state.quizCurrentIndex; i < state.quizQueue.length; i++) {
+            if (state.quizQueue[i]._isCorrect === undefined) {
+                state.quizQueue[i]._isCorrect = false;
+                state.quizWrongCount++;
+            }
+        }
+        showQuizResult();
+    }
 }
 
 function showQuizResult() {
@@ -595,7 +694,10 @@ function showQuizResult() {
     document.getElementById('result-wrong').innerText = state.quizWrongCount;
 
     const correctIds = state.quizQueue.filter(q => q._isCorrect).map(q => q.id);
-    state.vocabList = state.vocabList.filter(v => !correctIds.includes(v.id));
+    const note = getCurrentNote();
+    if (note) {
+        note.vocabList = note.vocabList.filter(v => !correctIds.includes(v.id));
+    }
 
     saveData();
     showScreen('result-screen');
@@ -634,25 +736,14 @@ function escapeHtml(text) {
     }[m]));
 }
 
-// 본문 복사 기능 (문장 사이에 빈 줄 추가)
 function copyCurrentNoteText() {
-    const folder = getCurrentFolder();
-    if (!folder || folder.notes.length === 0) {
+    const note = getCurrentNote();
+    if (!note || !note.text.trim()) {
         alert('복사할 본문 내용이 없습니다.');
         return;
     }
 
-    const currentText = folder.notes[state.currentNoteIndex] || "";
-
-    if (!currentText.trim()) {
-        alert('본문이 비어 있습니다.');
-        return;
-    }
-
-    // 문장 기호(. ! ?) 뒤의 공백을 기준으로 문장들을 나눔
-    const sentences = currentText.split(/(?<=[.!?])\s+/);
-    
-    // 문장과 문장 사이에 줄바꿈 2개(\n\n)를 넣어서 합침 (문단 사이 공백)
+    const sentences = splitSentences(note.text);
     const formattedText = sentences.join('\n\n');
 
     navigator.clipboard.writeText(formattedText)
