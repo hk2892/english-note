@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>영어 학습 앱</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- 메인 화면 (폴더 목록) -->
+  <div id="view-main" class="view active">
+    <header class="app-header">
+      <h1 class="header-title">내 폴더</h1>
+      <button id="btn-add-folder" class="primary-btn">+ 새 폴더</button>
+    </header>
+    <main class="folder-grid" id="folder-grid">
+      <!-- 폴더 카드가 동적으로 생성됩니다 -->
+    </main>
+  </div>
+
+  <!-- 본문 화면 (캐러셀) -->
+  <div id="view-viewer" class="view">
+    <header class="app-header">
+      <button id="btn-back-main" class="nav-btn">&lt; 메인</button>
+      <h2 id="viewer-folder-title" class="header-title">폴더 제목</h2>
+      <div class="header-actions">
+        <button id="btn-copy-text" class="text-btn">본문 복사</button>
+        <button id="btn-open-voca" class="text-btn">단어장</button>
+      </div>
+    </header>
+
+    <main class="carousel-container">
+      <button id="btn-prev-page" class="carousel-nav-btn prev">&lt;</button>
+      <div class="carousel-track-wrapper">
+        <div id="carousel-track" class="carousel-track">
+          <!-- 이전, 현재, 다음 페이지 카드가 표시됩니다 -->
+        </div>
+      </div>
+      <button id="btn-next-page" class="carousel-nav-btn next">&gt;</button>
+    </main>
+
+    <footer class="viewer-footer">
+      <button id="btn-edit-text" class="primary-btn">본문 수정</button>
+    </footer>
+  </div>
+
+  <!-- 퀴즈 화면 -->
+  <div id="view-quiz" class="view">
+    <header class="app-header">
+      <button id="btn-exit-quiz" class="nav-btn">나가기</button>
+      <h2 class="header-title">퀴즈 진행 중</h2>
+      <div class="quiz-status">
+        남은 단어: <span id="quiz-remaining">0</span> | 오답: <span id="quiz-wrongs">0</span>
+      </div>
+    </header>
+
+    <main class="quiz-main">
+      <div id="quiz-card-area">
+        <!-- 퀴즈 문제 및 채점 카드가 동적으로 생성됩니다 -->
+      </div>
+    </main>
+  </div>
+
+  <!-- 모달: 폴더 추가 -->
+  <div id="modal-folder" class="modal">
+    <div class="modal-content">
+      <h3>새 폴더 생성</h3>
+      <input type="text" id="input-folder-name" placeholder="폴더 이름을 입력하세요">
+      <div class="modal-actions">
+        <button id="btn-cancel-folder" class="secondary-btn">취소</button>
+        <button id="btn-confirm-folder" class="primary-btn">확인</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 모달: 폴더 관리 (길게 누르기) -->
+  <div id="modal-folder-manage" class="modal">
+    <div class="modal-content menu-modal">
+      <h3>폴더 설정</h3>
+      <button id="btn-rename-folder" class="menu-btn">이름 변경</button>
+      <button id="btn-delete-folder" class="menu-btn danger">폴더 삭제</button>
+      <button id="btn-cancel-manage" class="secondary-btn">취소</button>
+    </div>
+  </div>
+
+  <!-- 모달: 본문 추가/수정 -->
+  <div id="modal-text-edit" class="modal">
+    <div class="modal-content large">
+      <h3>본문 수정/추가</h3>
+      <p class="modal-subtext">글을 입력하면 문장 부호( . , ? , ! ) 기준으로 문단이 자동으로 나뉩니다.</p>
+      <textarea id="textarea-body-input" rows="10" placeholder="영어 본문을 입력해 주세요."></textarea>
+      <div class="modal-actions">
+        <button id="btn-cancel-text" class="secondary-btn">취소</button>
+        <button id="btn-confirm-text" class="primary-btn">확인</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 모달: 수집된 단어장 -->
+  <div id="modal-voca" class="modal">
+    <div class="modal-content large">
+      <div class="modal-header">
+        <h3>수집된 단어장</h3>
+        <button id="btn-close-voca" class="text-btn">닫기</button>
+      </div>
+
+      <div class="voca-tabs">
+        <button id="tab-word" class="tab-btn active">단어</button>
+        <button id="tab-idiom" class="tab-btn">숙어</button>
+      </div>
+
+      <div id="voca-list-container" class="voca-list">
+        <!-- 단어/숙어 목록 -->
+      </div>
+
+      <div class="voca-actions">
+        <button id="btn-ai-prompt" class="secondary-btn">AI 프롬프트 복사</button>
+        <button id="btn-ai-import" class="secondary-btn">AI 결과 일괄 등록</button>
+        <button id="btn-start-quiz" class="primary-btn" disabled>퀴즈 시작</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 모달: AI 결과 일괄 등록 -->
+  <div id="modal-ai-import" class="modal">
+    <div class="modal-content">
+      <h3>AI 응답 결과 일괄 등록</h3>
+      <textarea id="textarea-ai-response" rows="8" placeholder="AI가 생성해준 텍스트를 그대로 붙여넣으세요."></textarea>
+      <div class="modal-actions">
+        <button id="btn-cancel-ai" class="secondary-btn">취소</button>
+        <button id="btn-confirm-ai" class="primary-btn">확인</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
